@@ -1,0 +1,39 @@
+name: Market Light
+
+on:
+  schedule:
+    # 평일 장 마감 후 하루 1회 (UTC 22:10)
+    # 한국 시각: 서머타임(3~11월) 07:10 / 해제 기간 07:10 (UTC 고정이라 한국 시각은 같음)
+    - cron: "10 22 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "휴장일·주말에도 가장 최근 거래일 기준으로 실행"
+        type: boolean
+        default: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # 어제 신호(바뀐 ETF 비교용)와 S&P 500 목록을 다음 실행으로 넘김
+      - uses: actions/cache@v4
+        with:
+          path: state
+          key: state-${{ github.run_id }}
+          restore-keys: state-
+
+      - run: python light.py
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          FORCE: ${{ inputs.force && '1' || '0' }}
