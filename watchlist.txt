@@ -1,0 +1,268 @@
+# 내 관심종목 — S&P 500과 똑같은 조건으로 감시합니다.
+# 형식: 티커, 회사명   (한 줄에 하나, 회사명은 생략 가능, # 뒤는 메모)
+# 클래스 주식은 점으로 적어도 됩니다 (MOG.A → 자동으로 MOG-A 변환)
+
+# ── Nasdaq 100 (S&P 500에 없는 종목) ──
+SPCX, SpaceX
+ASML, ASML
+ARM, Arm Holdings
+SHOP, Shopify
+PDD, PDD Holdings
+MELI, MercadoLibre
+ALAB, Astera Labs
+NBIS, Nebius Group
+MSTR, Strategy
+CRWV, CoreWeave
+RKLB, Rocket Lab
+CCEP, Coca-Cola Europacific Partners
+TRI, Thomson Reuters
+FER, Ferrovial
+ALNY, Alnylam Pharmaceuticals
+
+# ── Russell 2000 ──
+TWST, Twist Bioscience
+FROG, JFrog
+MOG.A, Moog
+BTSG, BrightSpring Health
+VSAT, Viasat
+MXL, MaxLinear
+HUT, Hut 8
+TXG, 10x Genomics
+GKOS, Glaukos
+PCVX, Vaxcyte
+SM, SM Energy
+EAT, Brinker
+CYTK, Cytokinetics
+PBF, PBF Energy
+OSCR, Oscar Health
+
+# ── 추가 관심종목 (회사명은 알림 때 자동 조회) ──
+TSM
+AMAT
+LRCX
+SWKS
+MPWR
+UCTT
+ICHR
+ONTO
+TER
+FORM
+APH
+CLS
+RMBS
+TTMI
+SNX
+HPE
+CSCO
+P
+NRG
+PWR
+HUBB
+IPWR
+SMTC
+VRT
+VST
+NOK
+GLW
+PENG
+MRVL
+TSEM
+MTSI
+POET
+LWLG
+CIEN
+VIAV
+AXTI
+COHR
+AAOI
+CRDO
+AEHR
+FN
+NVTS
+ON
+BE
+EME
+CAT
+MTZ
+ORCL
+IREN
+KEEL
+CIFR
+APLD
+FLEX
+XEM
+SMR
+UUUU
+USAR
+MP
+ALM
+FCX
+SCCO
+NEM
+AG
+WEAT
+DBA
+DE
+CORN
+TEAM
+CRM
+HUBS
+FIG
+NOW
+RNG
+TWLO
+TDC
+WCLD
+ZETA
+MSFT
+DDOG
+DOCN
+APP
+RDDT
+SNOW
+WDAY
+XMTR
+KRMN
+BB
+INOD
+RXT
+TTAN
+DBX
+BRZE
+CHYM
+BULL
+FSLY
+DASH
+UBER
+SAIL
+S
+PANW
+CRWD
+ZS
+TENB
+RBRK
+OKTA
+NET
+AMBA
+OUST
+VPG
+EWZ
+PICS
+ALK
+UAL
+JOBY
+ACHR
+TTWO
+SPOT
+NFLX
+NEE
+CEG
+DUK
+BUD
+KO
+MNST
+MAT
+KR
+COST
+WMT
+VSXY
+CROX
+LULU
+NKE
+RACE
+ROST
+TJX
+VIK
+CCL
+BKNG
+CAVA
+MCD
+CAKE
+CPNG
+XLY
+PTGX
+IBRX
+NKTR
+ABSI
+RXRX
+NTLA
+CCCC
+TGTX
+CRSP
+NTRA
+ROIV
+PFE
+INCY
+ADMA
+ARKG
+HIMS
+UNH
+NVO
+LLY
+MRNA
+GRAL
+PSNL
+CMPS
+JNJ
+BSX
+IONQ
+QNT
+QBTS
+ASTS
+PL
+FLY
+KTOS
+AVAV
+LPTH
+UMAC
+LASR
+SOFI
+SEZL
+XYZ
+KLAR
+PATH
+DAVE
+BLK
+GS
+MS
+BAC
+V
+AXP
+WFC
+CFR
+FIGR
+CRCL
+COIN
+BITO
+IBIT
+HOOD
+ASST
+PURR
+CB
+ALL
+TRV
+PGR
+LEN
+DHI
+PHM
+HOV
+CCS
+LGIH
+STRL
+GEV
+FIX
+GE
+MATX
+ZIM
+XOM
+OXY
+VG
+PSX
+VLO
+MPC
+STNG
+FRO
+DVN
+FTI
+AEM
+AU
