@@ -43,6 +43,22 @@ RS_TOP = float(os.environ.get("RS_TOP", "30"))                    # 상위 30% +
 HIGH_NEAR = float(os.environ.get("HIGH_NEAR", "10"))              # 52주 고점 10% 이내 +1
 HIGH_FAR = float(os.environ.get("HIGH_FAR", "25"))                # 25% 넘게 아래면 -1
 
+# 위기지표 (점수와 별도로 경보만 판정. 🔴 개수가 CRISIS_CAP 이상이면 시장 🟢을 🟡로 제한)
+CRISIS_CAP = int(os.environ.get("CRISIS_CAP", "2"))
+VIX_TS_WARN = float(os.environ.get("VIX_TS_WARN", "0.95"))      # VIX ÷ VIX3M 이 이상이면 🟡
+VIX_TS_ALARM = float(os.environ.get("VIX_TS_ALARM", "1.0"))     # 1 이상 = 단기 공포가 장기보다 큼(역전) → 🔴
+OIL_WARN = float(os.environ.get("OIL_WARN", "10"))              # 유가 20일 변화 ±10% 🟡
+OIL_ALARM = float(os.environ.get("OIL_ALARM", "20"))            # ±20% 🔴 (급등=공급 충격, 급락=수요 붕괴)
+TNX_WARN = float(os.environ.get("TNX_WARN", "4.75"))            # 10년물 금리 수준(%) 🟡
+TNX_ALARM = float(os.environ.get("TNX_ALARM", "5.0"))           # 🔴
+TNX_BP_WARN = float(os.environ.get("TNX_BP_WARN", "25"))        # 20일 상승폭(bp) 🟡
+TNX_BP_ALARM = float(os.environ.get("TNX_BP_ALARM", "40"))      # 🔴 (금리 발작)
+DXY_WARN = float(os.environ.get("DXY_WARN", "2"))               # 달러지수 20일 상승(%) 🟡
+DXY_ALARM = float(os.environ.get("DXY_ALARM", "3"))             # 🔴
+CREDIT_WARN = float(os.environ.get("CREDIT_WARN", "1.5"))       # 하이일드÷국채(HYG/IEF) 20일 하락(%) 🟡
+CREDIT_ALARM = float(os.environ.get("CREDIT_ALARM", "3"))       # 🔴 (신용 위험 확대)
+CRISIS_TICKERS = ["^VIX", "^VIX3M", "CL=F", "^TNX", "DX-Y.NYB", "HYG", "IEF"]
+
 # 레버리지·인버스: 52주 고점 거리 점수 제외 / 채권·원자재: 분산일 점수 제외
 LEVERAGED = set(os.environ.get("LEVERAGED", "TQQQ,SQQQ,SOXL,SOXS,KORU").split(","))
 NO_DIST = set(os.environ.get("NO_DIST", "TLT,IEF,LQD,HYG,GLD,DBC").split(","))
@@ -245,6 +261,63 @@ def market_eval(data, universe, session) -> dict:
     return {"score": total, "light": light_of(total), "rows": rows, "ftd": ftd}
 
 
+# ───────────── 위기지표 ─────────────
+def _chg(df: pd.DataFrame | None, n: int) -> tuple[float, float] | None:
+    """(마지막 값, n거래일 전 대비 변화율%)"""
+    if df is None or len(df) <= n:
+        return None
+    c = df["Close"].dropna()
+    return float(c.iloc[-1]), float((c.iloc[-1] / c.iloc[-n - 1] - 1) * 100)
+
+
+def crisis_eval(data) -> dict:
+    rows = []                                                        # (신호 1/0/-1, 이름, 설명)
+    vix, vix3 = data.get("^VIX"), data.get("^VIX3M")
+    if vix is not None and vix3 is not None and len(vix) and len(vix3):
+        v, v3 = float(vix["Close"].iloc[-1]), float(vix3["Close"].iloc[-1])
+        r = v / v3
+        s = -1 if r >= VIX_TS_ALARM else (0 if r >= VIX_TS_WARN else 1)
+        tag = "역전·공포" if s < 0 else ("역전 근접" if s == 0 else "정상")
+        rows.append((s, "VIX구조", f"{r:.2f}  VIX {v:.1f} / 3개월 {v3:.1f} ({tag})"))
+
+    oil = _chg(data.get("CL=F"), 20)
+    if oil:
+        px, ch = oil
+        d1 = _chg(data.get("CL=F"), 1)[1]
+        s = -1 if abs(ch) >= OIL_ALARM else (0 if abs(ch) >= OIL_WARN else 1)
+        tag = "" if s == 1 else (" 급등·공급충격" if ch > 0 else " 급락·수요둔화")
+        rows.append((s, "유가 WTI", f"${px:.1f}  20일 {ch:+.1f}% · 1일 {d1:+.1f}%{tag}"))
+
+    tnx = data.get("^TNX")
+    if tnx is not None and len(tnx) > 21:
+        c = tnx["Close"].dropna()
+        c = c / 10 if c.iloc[-1] > 20 else c                         # 일부 시세는 42.5 = 4.25%
+        y, bp = float(c.iloc[-1]), float((c.iloc[-1] - c.iloc[-21]) * 100)
+        s = -1 if y >= TNX_ALARM or bp >= TNX_BP_ALARM else (
+            0 if y >= TNX_WARN or bp >= TNX_BP_WARN or bp <= -TNX_BP_ALARM else 1)
+        tag = " 금리 발작" if bp >= TNX_BP_ALARM else (" 안전자산 쏠림" if bp <= -TNX_BP_ALARM else "")
+        rows.append((s, "미10년물", f"{y:.2f}%  20일 {bp:+.0f}bp{tag}"))
+
+    dxy = _chg(data.get("DX-Y.NYB"), 20)
+    if dxy:
+        px, ch = dxy
+        s = -1 if ch >= DXY_ALARM else (0 if ch >= DXY_WARN else 1)
+        rows.append((s, "달러지수", f"{px:.1f}  20일 {ch:+.1f}%" + (" 달러 급등" if s < 0 else "")))
+
+    hyg, ief = data.get("HYG"), data.get("IEF")
+    if hyg is not None and ief is not None:
+        ratio = (hyg["Close"] / ief["Close"]).dropna()
+        if len(ratio) > 21:
+            ch = float((ratio.iloc[-1] / ratio.iloc[-21] - 1) * 100)
+            s = -1 if ch <= -CREDIT_ALARM else (0 if ch <= -CREDIT_WARN else 1)
+            rows.append((s, "신용", f"HYG/IEF 20일 {ch:+.1f}%" + (" 신용위험 확대" if s < 0 else "")))
+
+    alarms = sum(r[0] == -1 for r in rows)
+    warns = sum(r[0] == 0 for r in rows)
+    level = "경보" if alarms >= CRISIS_CAP else ("주의" if alarms or warns >= 2 else "평온")
+    return {"rows": rows, "alarms": alarms, "warns": warns, "level": level}
+
+
 # ───────────── ETF 판정 ─────────────
 def etf_eval(data, etfs, session) -> tuple[list[dict], list[str]]:
     res, missing = [], []
@@ -323,19 +396,19 @@ def etf_line(r: dict) -> str:
     rank = f"{r['rank']}" if r["rank"] else "-"
     mark = "*" if r["t"] in LEVERAGED or r["t"] in NO_DIST else " "
     sc = f"{r['score']:+d}" if r["score"] else "0"
-    return (fit(r["t"] + mark, 7) + fit(r["desc"], 16) + fit(sc, 4, True) + fit(rank, 5, True)
-            + f"{r['ret']:>+7.1f}{r['hi']:>7.1f}{r['dist']:>5d}")
+    return (fit(r["t"] + mark, 7) + fit(sc, 4, True) + fit(rank, 5, True)
+            + f"{r['ret']:>+7.1f}{r['hi']:>7.1f}{r['dist']:>5d}  " + r["desc"])
 
 
-ETF_HEAD = (fit("TICKER", 7) + fit("설명", 16) + fit("점수", 4, True) + fit("RS", 5, True)
-            + fit("3M%", 7, True) + fit("고점%", 7, True) + fit("분산", 5, True))
+ETF_HEAD = (fit("TICKER", 7) + fit("점수", 4, True) + fit("RS", 5, True)
+            + fit("3M%", 7, True) + fit("고점%", 7, True) + fit("분산", 5, True) + "  설명")
 
 
 # ───────────── 실행 ─────────────
 def main():
     etfs = load_etfs()
     universe = load_universe()
-    need = list(dict.fromkeys(["QQQ", "SPY", "^VIX"] + list(etfs) + universe))
+    need = list(dict.fromkeys(["QQQ", "SPY"] + CRISIS_TICKERS + list(etfs) + universe))
     data = download(need)
     if "QQQ" not in data or "SPY" not in data:
         post("⚠️ 시장 신호등: QQQ·SPY 시세를 받지 못했습니다. 일시적 오류일 수 있습니다.")
@@ -347,6 +420,10 @@ def main():
         return
 
     m = market_eval(data, universe, session)
+    cr = crisis_eval(data)
+    capped = cr["alarms"] >= CRISIS_CAP and m["light"] == 1
+    if capped:
+        m["light"] = 0                                              # 위기지표 경보 → 🟢 제한
     etf_res, missing = etf_eval(data, etfs, session)
 
     # 어제 신호와 비교 (같은 날 다시 실행해도 비교 대상은 그대로 유지)
@@ -364,7 +441,7 @@ def main():
     lines = []
     for label, desc, s in m["rows"]:
         sc = "참고" if s is None else f"{s:+d}" if s else "0"
-        lines.append(fit(label, 10) + fit(desc, 30) + fit(sc, 4, True))
+        lines.append(fit(label, 10) + fit(sc, 4, True) + "  " + desc)
     for t, f in m["ftd"].items():
         if not f:
             continue
@@ -373,17 +450,24 @@ def main():
         elif f["day"] > 1:
             lines.append(f"{t} 조정 {f['dd']:.0f}% 후 반등 시도 {f['day']}일째 (저점 {f['low_date']:%m/%d})")
     lines.append(f"→ {MARKET_ADVICE[m['light']]}")
+    cap_note = f"\n⚠️ 점수는 🟢이지만 위기지표 🔴 {cr['alarms']}개로 🟡 제한" if capped else ""
     post(f"**🚦 시장환경 | {session} 마감**\n"
-         f"## {LIGHT[m['light']]} {MARKET_NAME[m['light']]} ({m['score']:+d}점){change}")
+         f"## {LIGHT[m['light']]} {MARKET_NAME[m['light']]} ({m['score']:+d}점){change}{cap_note}")
     send_block("", None, lines)
+
+    # ①-2 위기지표
+    if cr["rows"]:
+        icon = {"평온": "🟢", "주의": "🟡", "경보": "🔴"}[cr["level"]]
+        send_block(f"🌡️ 위기지표 | {icon} {cr['level']} (🔴 {cr['alarms']} · 🟡 {cr['warns']})", None,
+                   [f"{LIGHT[sg]} " + fit(name, 10) + desc for sg, name, desc in cr["rows"]])
 
     # ② 신호 바뀐 ETF
     changed = [r for r in etf_res if r["t"] in prev and prev[r["t"]] != r["light"]]
     if changed:
         changed.sort(key=lambda r: (-(r["light"] - prev[r["t"]]), -r["score"]))
         send_block(f"🔄 신호 바뀐 ETF ({len(changed)})", None,
-                   [fit(r["t"], 7) + fit(r["desc"], 16) + f"{LIGHT[prev[r['t']]]}→{LIGHT[r['light']]}"
-                    f"  {r['score']:+d}점" for r in changed])
+                   [fit(r["t"], 7) + f"{LIGHT[prev[r['t']]]}→{LIGHT[r['light']]}"
+                    f"  {r['score']:+d}점  " + r["desc"] for r in changed])
 
     # ③ ETF 표 (신호별, 점수·RS 순)
     for lv in (1, 0, -1):
@@ -398,7 +482,7 @@ def main():
          "\\* 레버리지는 고점% 점수 제외, 채권·금·원자재는 분산일 점수 제외")
     if missing:
         post("⚠️ 시세를 받지 못한 ETF: " + ", ".join(missing))
-    print(f"완료: 시장 {m['score']:+d}, ETF {len(etf_res)}개, 바뀐 신호 {len(changed)}개")
+    print(f"완료: 시장 {m['score']:+d}, 위기 {cr['level']}, ETF {len(etf_res)}개, 바뀐 신호 {len(changed)}개")
 
 
 if __name__ == "__main__":
